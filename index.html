@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Networking Contact Log</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <h1 class="text-3xl font-bold text-gray-900 mb-2">Networking Contact Log</h1>
+  <p class="text-gray-500 mb-6">Track your professional network. Never lose touch.</p>
+
+  <!-- Controls -->
+  <div class="flex flex-col sm:flex-row gap-3 mb-6">
+    <input id="searchInput" type="text" placeholder="Search by name or company..." aria-label="Search contacts"
+      class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+    <select id="sortSelect" aria-label="Sort contacts"
+      class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <option value="oldest">Sort: Least Recently Contacted</option>
+      <option value="newest">Sort: Most Recently Contacted</option>
+      <option value="name">Sort: Name A–Z</option>
+      <option value="followup">Sort: Follow-up Due</option>
+    </select>
+    <button onclick="openModal(null)" aria-label="Add new contact"
+      class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">
+      + Add Contact
+    </button>
+  </div>
+
+  <!-- Contact list -->
+  <div id="contactList" class="space-y-3"></div>
+  <div id="emptyState" class="hidden text-center py-16 text-gray-400">
+    <div class="text-5xl mb-3">👥</div>
+    <p class="text-lg font-medium">No contacts yet</p>
+    <p class="text-sm mt-1">Click "+ Add Contact" to get started</p>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <h2 id="modalTitle" class="text-xl font-bold text-gray-900 mb-5">Add Contact</h2>
+      <form id="contactForm" class="space-y-4" onsubmit="saveContact(event)">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="cName">Name *</label>
+          <input id="cName" type="text" required aria-label="Contact name"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="cCompany">Company</label>
+            <input id="cCompany" type="text" aria-label="Company"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="cRole">Role</label>
+            <input id="cRole" type="text" aria-label="Role"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="cEmail">Email</label>
+          <input id="cEmail" type="email" aria-label="Email address"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="cLastContact">Last Contact Date</label>
+            <input id="cLastContact" type="date" aria-label="Last contact date"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="cFollowup">Follow-up Date</label>
+            <input id="cFollowup" type="date" aria-label="Follow-up date"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="cNotes">Notes</label>
+          <textarea id="cNotes" rows="3" aria-label="Notes"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+        </div>
+        <input type="hidden" id="editId"/>
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium">Save</button>
+          <button type="button" onclick="closeModal()" class="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'ncl_contacts';
+let contacts = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isOverdue(date) {
+  if (!date) return false;
+  return date < today();
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  return Math.floor(diff / 86400000);
+}
+
+function openModal(id) {
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('editId').value = id || '';
+  const form = document.getElementById('contactForm');
+  form.reset();
+  if (id) {
+    const c = contacts.find(x => x.id === id);
+    if (c) {
+      document.getElementById('modalTitle').textContent = 'Edit Contact';
+      document.getElementById('cName').value = c.name || '';
+      document.getElementById('cCompany').value = c.company || '';
+      document.getElementById('cRole').value = c.role || '';
+      document.getElementById('cEmail').value = c.email || '';
+      document.getElementById('cLastContact').value = c.lastContact || '';
+      document.getElementById('cFollowup').value = c.followup || '';
+      document.getElementById('cNotes').value = c.notes || '';
+    }
+  } else {
+    document.getElementById('modalTitle').textContent = 'Add Contact';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+}
+
+function saveContact(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value || crypto.randomUUID();
+  const contact = {
+    id,
+    name: document.getElementById('cName').value.trim(),
+    company: document.getElementById('cCompany').value.trim(),
+    role: document.getElementById('cRole').value.trim(),
+    email: document.getElementById('cEmail').value.trim(),
+    lastContact: document.getElementById('cLastContact').value,
+    followup: document.getElementById('cFollowup').value,
+    notes: document.getElementById('cNotes').value.trim(),
+  };
+  const idx = contacts.findIndex(x => x.id === id);
+  if (idx >= 0) contacts[idx] = contact;
+  else contacts.push(contact);
+  save();
+  closeModal();
+  render();
+}
+
+function deleteContact(id) {
+  if (!confirm('Delete this contact?')) return;
+  contacts = contacts.filter(x => x.id !== id);
+  save();
+  render();
+}
+
+function getSorted() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  let list = contacts.filter(c =>
+    c.name.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q)
+  );
+  if (sort === 'oldest') list.sort((a, b) => (a.lastContact || '') < (b.lastContact || '') ? -1 : 1);
+  else if (sort === 'newest') list.sort((a, b) => (a.lastContact || '') > (b.lastContact || '') ? -1 : 1);
+  else if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'followup') list.sort((a, b) => (a.followup || '9999') < (b.followup || '9999') ? -1 : 1);
+  return list;
+}
+
+function render() {
+  const list = getSorted();
+  const container = document.getElementById('contactList');
+  const empty = document.getElementById('emptyState');
+  if (list.length === 0) {
+    container.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  container.innerHTML = list.map(c => {
+    const overdue = isOverdue(c.followup);
+    const days = daysSince(c.lastContact);
+    const daysText = days === null ? 'Never contacted' : days === 0 ? 'Contacted today' : `${days}d ago`;
+    return `
+    <div class="bg-white border ${overdue ? 'border-red-300' : 'border-gray-200'} rounded-xl p-4 shadow-sm">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <span class="font-semibold text-gray-900 text-lg">${escHtml(c.name)}</span>
+            ${overdue ? '<span class="bg-red-100 text-red-700 text-xs font-medium px-2 py-0.5 rounded-full">Follow-up overdue</span>' : ''}
+          </div>
+          <div class="text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+            ${c.company ? `<span>🏢 ${escHtml(c.company)}</span>` : ''}
+            ${c.role ? `<span>💼 ${escHtml(c.role)}</span>` : ''}
+            ${c.email ? `<a href="mailto:${escHtml(c.email)}" class="text-blue-600 hover:underline">✉ ${escHtml(c.email)}</a>` : ''}
+          </div>
+          <div class="mt-2 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
+            <span>Last contact: <strong>${c.lastContact || '—'}</strong> (${daysText})</span>
+            ${c.followup ? `<span class="${overdue ? 'text-red-600 font-semibold' : ''}">Follow-up: ${c.followup}</span>` : ''}
+          </div>
+          ${c.notes ? `<p class="mt-2 text-sm text-gray-700 bg-gray-50 rounded px-3 py-2 line-clamp-2">${escHtml(c.notes)}</p>` : ''}
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button onclick="openModal('${c.id}')" aria-label="Edit ${escHtml(c.name)}"
+            class="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition">✏️</button>
+          <button onclick="deleteContact('${c.id}')" aria-label="Delete ${escHtml(c.name)}"
+            class="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('searchInput').addEventListener('input', render);
+document.getElementById('sortSelect').addEventListener('change', render);
+document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+render();
+</script>
+</body>
+</html>
